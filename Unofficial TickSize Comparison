@@ -1,1 +1,140 @@
-.
+import requests
+# This is project of Michael P.
+# (Suggested) URL Endpoints
+SPOT_MARKETS_URL = "https://sentry.lcd.injective.network/injective/exchange/v1beta1/spot/markets"
+SPOT_MID_PRICE_URL = "https://sentry.lcd.injective.network/injective/exchange/v1beta1/spot/mid_price_and_tob/"
+PERP_MARKETS_URL = "https://sentry.lcd.injective.network/injective/exchange/v1beta1/derivative/markets"
+
+# The asset Decimal counts
+ASSET_DECIMALS = {
+    "USDT": 6,
+    "INJ": 18,
+    
+}
+
+# Tick Size Guidelines (Human Readable)
+TICK_SIZE_GUIDELINES = {
+    "USDT": [
+        (0.0000001, 0.0000000001, 1000000),
+        (0.000001, 0.000000001, 100000),
+        (0.00001, 0.00000001, 10000),
+        (0.0001, 0.0000001, 1000),
+        (0.001, 0.000001, 100),
+        (0.01, 0.00001, 10),
+        (0.1, 0.0001, 1),
+        (1, 0.001, 0.1),
+        (10, 0.01, 0.01),
+        (100, 0.01, 0.001),
+        (1000, 0.1, 0.0001),
+        (10000, 1, 0.0001)
+    ],
+    "INJ": [
+        (0.00000001, 0.00000000001, 100000),
+        (0.0000001, 0.0000000001, 10000),
+        (0.000001, 0.000000001, 1000),
+        (0.00001, 0.00000001, 100),
+        (0.0001, 0.0000001, 10),
+        (0.001, 0.000001, 1),
+        (0.01, 0.00001, 0.1),
+        (0.1, 0.0001, 0.01)
+    ]
+}
+
+def fetch_json(url):
+    """ Fetch JSON data from a URL. """
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        print(f"Error fetching data from {url}: {e}")
+        return None
+
+def get_tick_sizes(price, asset_type):
+    """ Calculate the suggested tick sizes based on the current price and asset type. """
+    guidelines = TICK_SIZE_GUIDELINES.get(asset_type, [])
+    for min_price, min_price_tick, min_qty_tick in guidelines:
+        if price >= min_price:
+            return min_price_tick, min_qty_tick
+    return None, None
+
+def convert_to_human_readable(amount, decimals):
+    """ Convert machine-readable amount to human-readable format. """
+    return amount / (10 ** decimals)
+
+def main():
+    # Here to Fetch the market data
+    spot_markets = fetch_json(SPOT_MARKETS_URL)
+    perp_markets = fetch_json(PERP_MARKETS_URL)
+    
+    if not spot_markets or not perp_markets:
+        print("Failed to retrieve market data.")
+        return
+
+    discrepancies = []
+
+    # Here to check the spot markets
+    for market in spot_markets.get('markets', []):
+        base_asset = market['base_asset']
+        quote_asset = market['quote_asset']
+        market_id = market['market_id']
+
+        # Here to fetch the mid price for the spot market
+        mid_price_data = fetch_json(SPOT_MID_PRICE_URL + market_id)
+        if mid_price_data:
+            mid_price = mid_price_data.get('mid_price', 0)
+
+            base_decimals = ASSET_DECIMALS.get(base_asset, 0)
+            quote_decimals = ASSET_DECIMALS.get(quote_asset, 0)
+            
+            current_min_price_tick = convert_to_human_readable(int(market['min_price_tick_size']), quote_decimals)
+            current_min_qty_tick = convert_to_human_readable(int(market['min_qty_tick_size']), base_decimals)
+
+            suggested_min_price_tick, suggested_min_qty_tick = get_tick_sizes(mid_price, quote_asset)
+
+            if current_min_price_tick != suggested_min_price_tick or current_min_qty_tick != suggested_min_qty_tick:
+                discrepancies.append({
+                    'market': market_id,
+                    'base_asset': base_asset,
+                    'quote_asset': quote_asset,
+                    'current_min_price_tick': current_min_price_tick,
+                    'suggested_min_price_tick': suggested_min_price_tick,
+                    'current_min_qty_tick': current_min_qty_tick,
+                    'suggested_min_qty_tick': suggested_min_qty_tick
+                })
+    
+    # Here to check the perp markets
+    for market in perp_markets.get('markets', []):
+        base_asset = market['base_asset']
+        quote_asset = market['quote_asset']
+        mark_price = market.get('mark_price', 0)
+        
+        base_decimals = ASSET_DECIMALS.get(base_asset, 0)
+        quote_decimals = ASSET_DECIMALS.get(quote_asset, 0)
+        
+        current_min_price_tick = convert_to_human_readable(int(market.get('min_price_tick_size', 0)), quote_decimals)
+        current_min_qty_tick = convert_to_human_readable(int(market.get('min_qty_tick_size', 0)), base_decimals)
+
+        suggested_min_price_tick, suggested_min_qty_tick = get_tick_sizes(mark_price, quote_asset)
+
+        if current_min_price_tick != suggested_min_price_tick or current_min_qty_tick != suggested_min_qty_tick:
+            discrepancies.append({
+                'market': market.get('market_id', 'unknown'),
+                'base_asset': base_asset,
+                'quote_asset': quote_asset,
+                'current_min_price_tick': current_min_price_tick,
+                'suggested_min_price_tick': suggested_min_price_tick,
+                'current_min_qty_tick': current_min_qty_tick,
+                'suggested_min_qty_tick': suggested_min_qty_tick
+            })
+
+    # Here to output any discrepancies
+    if discrepancies:
+        print("Discrepancies found:")
+        for discrepancy in discrepancies:
+            print(json.dumps(discrepancy, indent=2))
+    else:
+        print("No discrepancies found.")
+
+if __name__ == "__main__":
+    main()
