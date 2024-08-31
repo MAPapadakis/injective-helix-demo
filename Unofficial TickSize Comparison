@@ -1,4 +1,6 @@
 import requests
+import json 
+# Importing json may be unecessary??  Unsure.
 # This is project of Michael P.
 # (Suggested) URL Endpoints
 SPOT_MARKETS_URL = "https://sentry.lcd.injective.network/injective/exchange/v1beta1/spot/markets"
