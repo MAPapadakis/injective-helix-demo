@@ -1,8 +1,6 @@
 import requests
-import json 
-# Importing json may be unecessary??  Unsure.
-# This is project of Michael P.
-# (Suggested) URL Endpoints
+
+# Suggested URL Endpoints
 SPOT_MARKETS_URL = "https://sentry.lcd.injective.network/injective/exchange/v1beta1/spot/markets"
 SPOT_MID_PRICE_URL = "https://sentry.lcd.injective.network/injective/exchange/v1beta1/spot/mid_price_and_tob/"
 PERP_MARKETS_URL = "https://sentry.lcd.injective.network/injective/exchange/v1beta1/derivative/markets"
@@ -11,7 +9,6 @@ PERP_MARKETS_URL = "https://sentry.lcd.injective.network/injective/exchange/v1be
 ASSET_DECIMALS = {
     "USDT": 6,
     "INJ": 18,
-    
 }
 
 # Tick Size Guidelines (Human Readable)
@@ -43,7 +40,7 @@ TICK_SIZE_GUIDELINES = {
 }
 
 def fetch_json(url):
-    """ Fetch JSON data from a URL. """
+    """Fetch JSON data from a URL."""
     try:
         response = requests.get(url)
         response.raise_for_status()
@@ -53,7 +50,7 @@ def fetch_json(url):
         return None
 
 def get_tick_sizes(price, asset_type):
-    """ Calculate the suggested tick sizes based on the current price and asset type. """
+    """Calculate the suggested tick sizes based on the current price and asset type."""
     guidelines = TICK_SIZE_GUIDELINES.get(asset_type, [])
     for min_price, min_price_tick, min_qty_tick in guidelines:
         if price >= min_price:
@@ -61,11 +58,11 @@ def get_tick_sizes(price, asset_type):
     return None, None
 
 def convert_to_human_readable(amount, decimals):
-    """ Convert machine-readable amount to human-readable format. """
+    """Convert machine-readable amount to human-readable format."""
     return amount / (10 ** decimals)
 
 def main():
-    # Here to Fetch the market data
+    # Fetch the market data
     spot_markets = fetch_json(SPOT_MARKETS_URL)
     perp_markets = fetch_json(PERP_MARKETS_URL)
     
@@ -75,13 +72,13 @@ def main():
 
     discrepancies = []
 
-    # Here to check the spot markets
+    # Check the spot markets
     for market in spot_markets.get('markets', []):
         base_asset = market['base_asset']
         quote_asset = market['quote_asset']
         market_id = market['market_id']
 
-        # Here to fetch the mid price for the spot market
+        # Fetch the mid price for the spot market
         mid_price_data = fetch_json(SPOT_MID_PRICE_URL + market_id)
         if mid_price_data:
             mid_price = mid_price_data.get('mid_price', 0)
@@ -105,7 +102,7 @@ def main():
                     'suggested_min_qty_tick': suggested_min_qty_tick
                 })
     
-    # Here to check the perp markets
+    # Check the perp markets
     for market in perp_markets.get('markets', []):
         base_asset = market['base_asset']
         quote_asset = market['quote_asset']
@@ -130,13 +127,20 @@ def main():
                 'suggested_min_qty_tick': suggested_min_qty_tick
             })
 
-    # Here to output any discrepancies
+    # Output any discrepancies
     if discrepancies:
         print("Discrepancies found:")
         for discrepancy in discrepancies:
-            print(json.dumps(discrepancy, indent=2))
+            print(f"Market: {discrepancy['market']}")
+            print(f"Base Asset: {discrepancy['base_asset']}")
+            print(f"Quote Asset: {discrepancy['quote_asset']}")
+            print(f"Current Min Price Tick: {discrepancy['current_min_price_tick']}")
+            print(f"Suggested Min Price Tick: {discrepancy['suggested_min_price_tick']}")
+            print(f"Current Min Quantity Tick: {discrepancy['current_min_qty_tick']}")
+            print(f"Suggested Min Quantity Tick: {discrepancy['suggested_min_qty_tick']}")
+            print("-" * 40)
     else:
-        print("No discrepancies found.")
+        print("No discrepancies detected.")
 
 if __name__ == "__main__":
     main()
