@@ -61,18 +61,27 @@ def get_tick_sizes(price, asset_type):
     return None, None
 
 def convert_to_human_readable(amount, decimals):
-    """Convert machine-readable amount to human-readable format."""
+    """THIS SHOULD FULFILL THE FOLLOWING: Convert machine-readable amount to human-readable format."""
     return amount / (10 ** decimals)
 
 def process_market_data(markets, is_spot=True):
-    """Process market data and check for discrepancies."""
     discrepancies = []
-    for market in markets.get('markets', []):
+    
+    # CHECKER IF THE 'markets' KEY IS IN EXISTANCE
+    if 'markets' not in markets:
+        print("No 'markets' key found in the response.")
+        return discrepancies
+
+    for market in markets['markets']:
+        # THIS BIT WILL CHECK IF EXPECTED KEYS ARE PRESENT
+        if 'base_asset' not in market or 'quote_asset' not in market:
+            print(f"Market data missing expected keys: {market}")
+            continue
+
         base_asset = market['base_asset']
         quote_asset = market['quote_asset']
         market_id = market.get('market_id', 'unknown')
 
-        # Fetch the mid price for the spot market or use mark price for perp markets
         mid_price = 0
         if is_spot:
             mid_price_data = fetch_json(SPOT_MID_PRICE_URL + market_id)
@@ -85,15 +94,12 @@ def process_market_data(markets, is_spot=True):
 
         base_decimals = ASSET_DECIMALS.get(base_asset, 0)
         quote_decimals = ASSET_DECIMALS.get(quote_asset, 0)
-        
-        # Convert tick sizes to human-readable format
+
         current_min_price_tick = convert_to_human_readable(int(market.get('min_price_tick_size', 0)), quote_decimals)
         current_min_qty_tick = convert_to_human_readable(int(market.get('min_qty_tick_size', 0)), base_decimals)
 
-        # Get suggested tick sizes
         suggested_min_price_tick, suggested_min_qty_tick = get_tick_sizes(mid_price, quote_asset)
 
-        # Check for discrepancies
         if (current_min_price_tick != suggested_min_price_tick or
                 current_min_qty_tick != suggested_min_qty_tick):
             discrepancies.append({
@@ -106,7 +112,6 @@ def process_market_data(markets, is_spot=True):
                 'suggested_min_qty_tick': suggested_min_qty_tick
             })
     return discrepancies
-
 def main():
     # Fetch the market data
     spot_markets = fetch_json(SPOT_MARKETS_URL)
