@@ -1,4 +1,5 @@
 import requests
+import time
 
 # Suggested URL Endpoints
 SPOT_MARKETS_URL = "https://sentry.lcd.injective.network/injective/exchange/v1beta1/spot/markets"
@@ -40,14 +41,15 @@ TICK_SIZE_GUIDELINES = {
 }
 
 def fetch_json(url, retries=3, delay=2):
-    """Fetch JSON data from a URL. [SHOULD ALSO RETRY ON FAILURE]"""
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        print(f"Error fetching data from {url} (Attempt {attempt + 1}): {e}")
-        time.sleep(delay)
+    """Fetch JSON data from a URL with retries on failure."""
+    for attempt in range(retries):
+        try:
+            response = requests.get(url)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            print(f"Error fetching data from {url} (Attempt {attempt + 1}): {e}")
+            time.sleep(delay)
     return None
 
 def get_tick_sizes(price, asset_type):
@@ -71,6 +73,7 @@ def process_market_data(markets, is_spot=True):
         market_id = market.get('market_id', 'unknown')
 
         # Fetch the mid price for the spot market or use mark price for perp markets
+        mid_price = 0
         if is_spot:
             mid_price_data = fetch_json(SPOT_MID_PRICE_URL + market_id)
             if mid_price_data:
