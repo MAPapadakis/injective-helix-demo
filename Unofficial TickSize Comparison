@@ -3,18 +3,20 @@ import time
 
 # Suggested URL Endpoints
 SPOT_MARKETS_URL = "https://sentry.lcd.injective.network/injective/exchange/v1beta1/spot/markets"
-SPOT_MID_PRICE_URL = "https://sentry.lcd.injective.network/injective/exchange/v1beta1/spot/mid_price_and_tob/"
 PERP_MARKETS_URL = "https://sentry.lcd.injective.network/injective/exchange/v1beta1/derivative/markets"
 
 # The asset Decimal counts
 ASSET_DECIMALS = {
-    "USDT": 6,
-    "INJ": 18,
+    "usdt": 6,
+    "inj": 18,
 }
+
+# Default decimals for unknown denominations
+DEFAULT_DECIMALS = 6
 
 # Tick Size Guidelines (Human Readable)
 TICK_SIZE_GUIDELINES = {
-    "USDT": [
+    "usdt": [
         (0.0000001, 0.0000000001, 1000000),
         (0.000001, 0.000000001, 100000),
         (0.00001, 0.00000001, 10000),
@@ -28,7 +30,7 @@ TICK_SIZE_GUIDELINES = {
         (1000, 0.1, 0.0001),
         (10000, 1, 0.0001)
     ],
-    "INJ": [
+    "inj": [
         (0.00000001, 0.00000000001, 100000),
         (0.0000001, 0.0000000001, 10000),
         (0.000001, 0.000000001, 1000),
@@ -41,7 +43,7 @@ TICK_SIZE_GUIDELINES = {
 }
 
 def fetch_json(url, retries=3, delay=2):
-    #fetch JSON data from a URL, with retries on failure.
+    """Fetch JSON data from a URL with retries on failure."""
     for attempt in range(retries):
         try:
             response = requests.get(url)
@@ -53,8 +55,8 @@ def fetch_json(url, retries=3, delay=2):
     return None
 
 def fetch_market_data():
+    """Fetch spot market data."""
     spot_markets = fetch_json(SPOT_MARKETS_URL)
-    
     if spot_markets and isinstance(spot_markets, dict):
         return spot_markets.get('markets', [])
     return []
@@ -77,63 +79,45 @@ def process_spot_market_data(markets):
                 'missing_keys': missing_keys
             })
             continue
+        
+        # Get current tick sizes
+        quote_denom = market['quote_denom']
+        if quote_denom not in ASSET_DECIMALS:
+            print(f"Warning: Unknown quote_denom '{quote_denom}' for market '{market.get('ticker')}'.")
+            continue
 
-    return discrepancies
+        min_price_tick_size = convert_to_human_readable(
+            float(market['min_price_tick_size']),
+            ASSET_DECIMALS[quote_denom]
+        )
+        min_quantity_tick_size = convert_to_human_readable(
+            float(market['min_quantity_tick_size']),
+            ASSET_DECIMALS[quote_denom]
+        )
 
-def process_perpetual_market_data(markets):
-    expected_market_keys = {
-        'ticker', 'oracle_base', 'oracle_quote', 'oracle_type',
-        'oracle_scale_factor', 'quote_denom', 'market_id',
-        'initial_margin_ratio', 'maintenance_margin_ratio',
-        'maker_fee_rate', 'taker_fee_rate', 'relayer_fee_share_rate',
-        'isPerpetual', 'status', 'min_price_tick_size',
-        'min_quantity_tick_size', 'min_notional', 'admin',
-        'admin_permissions',
-    }
-
-    expected_perpetual_info_keys = {
-        'hourly_funding_rate_cap', 'hourly_interest_rate',
-        'next_funding_timestamp', 'funding_interval',
-        'cumulative_funding', 'cumulative_price', 'last_timestamp',
-    }
-
-    discrepancies = []
-
-    for market in markets:
-        market_data = market.get('market', {})
-        perpetual_info = market.get('perpetual_info', {})
-
-        #MAKE SURE ITS A PERPETUAL MARKET
-        if not perpetual_info:
-            print(f"Market '{market_data.get('ticker')}' is not a perpetual market or missing perpetual_info.")
-            continue  
-
-        missing_market_keys = expected_market_keys - market_data.keys()
-        if missing_market_keys:
+        # Get expected tick sizes
+        expected_tick_sizes = get_tick_sizes(min_price_tick_size, quote_denom)
+        
+        if expected_tick_sizes is None:
+            print(f"No guidelines found for market '{market.get('ticker')}'.")
+            continue
+        
+        # Compare current tick sizes with expected tick sizes
+        if (min_price_tick_size, min_quantity_tick_size) != expected_tick_sizes:
             discrepancies.append({
-                'market': market_data.get('ticker', 'Unknown'),
-                'missing_keys': missing_market_keys
+                'market': market.get('ticker'),
+                'current_sizes': (min_price_tick_size, min_quantity_tick_size),
+                'expected_sizes': expected_tick_sizes
             })
-
-        missing_perpetual_info_keys = expected_perpetual_info_keys - perpetual_info.keys()
-        if missing_perpetual_info_keys:
-            discrepancies.append({
-                'market': market_data.get('ticker', 'Unknown'),
-                'missing_keys': missing_perpetual_info_keys
-            })
-
-        # Log Full Data when there be discrepancies!
-        if missing_market_keys or missing_perpetual_info_keys:
-            print(f"Full market data for {market_data.get('ticker')}: {market}")
 
     return discrepancies
 
 def convert_to_human_readable(amount, decimals):
-    #Converts machine-readable amount to human-readable format, hopefully.
+    """Convert machine-readable amount to human-readable format."""
     return amount / (10 ** decimals)
 
 def get_tick_sizes(price, asset_type):
-    #SHOULD calculate the suggested tick sizes based on the current price and asset type.
+    """Calculate the suggested tick sizes based on the current price and asset type."""
     guidelines = TICK_SIZE_GUIDELINES.get(asset_type, [])
     for min_price, min_price_tick, min_qty_tick in guidelines:
         if price >= min_price:
@@ -142,27 +126,20 @@ def get_tick_sizes(price, asset_type):
 
 def main():
     spot_markets = fetch_market_data()
-    perp_markets = fetch_json(PERP_MARKETS_URL)
-
     discrepancies = []
+
     if spot_markets:
         discrepancies += process_spot_market_data(spot_markets)
-        
-    if perp_markets and 'markets' in perp_markets:
-        discrepancies += process_perpetual_market_data(perp_markets['markets'])
-    else:
-        print("No perpetual markets data returned.")
 
     if discrepancies:
         print("Discrepancies found:")
         for discrepancy in discrepancies:
             market_name = discrepancy.get('market', 'Unknown')
-            missing_keys = discrepancy.get('missing_keys', [])
-            print(f"Market: {market_name}, Missing Keys: {missing_keys}")
+            current_sizes = discrepancy.get('current_sizes', [])
+            expected_sizes = discrepancy.get('expected_sizes', [])
+            print(f"Market: {market_name}, Current Tick Sizes: {current_sizes}, Expected Tick Sizes: {expected_sizes}")
     else:
         print("No discrepancies detected.")
-        
-    print("Fetched Perpetual Markets:", perp_markets, "And THAT'S THAT.")
 
 if __name__ == "__main__":
     main()
