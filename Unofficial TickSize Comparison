@@ -39,7 +39,10 @@ TICK_SIZE_GUIDELINES = {
         (0.1, 0.0001, 0.01)
     ]
 }
+#Define fetch_json and fetch/definte market data (Define both fetching processesses...)
 
+ 
+        
 def fetch_json(url, retries=3, delay=2):
     """Fetch JSON data from a URL with retries on failure."""
     for attempt in range(retries):
@@ -51,6 +54,42 @@ def fetch_json(url, retries=3, delay=2):
             print(f"Error fetching data from {url} (Attempt {attempt + 1}): {e}")
             time.sleep(delay)
     return None
+    
+def fetch_market_data():
+    spot_markets = fetch_json(SPOT_MARKETS_URL)  # Fetch data from the API
+    if spot_markets:
+        return spot_markets.get('markets', [])  # Return the list of markets
+    return []
+        
+    
+
+market_data = fetch_market_data()
+
+# The EXPECTED Keys
+expected_keys = {
+    'ticker', 'oracle_base', 'oracle_quote', 'oracle_type',
+    'oracle_scale_factor', 'quote_denom', 'market_id',
+    'initial_margin_ratio', 'maintenance_margin_ratio',
+    'maker_fee_rate', 'taker_fee_rate', 'relayer_fee_share_rate',
+    'isPerpetual', 'status', 'min_price_tick_size',
+    'min_quantity_tick_size', 'min_notional', 'admin',
+    'admin_permissions'
+}
+
+for market in market_data:
+    missing_keys = expected_keys - market.keys()
+    if missing_keys:
+        print(f"Market data missing expected keys: {missing_keys}")
+        continue  # Here to skip the processing of the market if keys are missing
+    
+    #The Processing/prting of the market data
+    print(f"Processing market: {market['ticker']}")
+
+#SHOULD(?) handle cases which have literally no discrepancies, if need be
+if not any(missing_keys):
+    print("No discrepancies detected.")
+    
+
 
 def get_tick_sizes(price, asset_type):
     """Calculate the suggested tick sizes based on the current price and asset type."""
@@ -67,20 +106,23 @@ def convert_to_human_readable(amount, decimals):
 def process_market_data(markets, is_spot=True):
     discrepancies = []
     
-    # CHECKER IF THE 'markets' KEY IS IN EXISTANCE
+    # CHECKER IF THE 'markets' KEY IS IN EXISTENCE
     if 'markets' not in markets:
         print("No 'markets' key found in the response.")
         return discrepancies
 
     for market in markets['markets']:
+        # Accessing the nested 'market' dictionary
+        market_data = market.get('market', {})
+        
         # THIS BIT WILL CHECK IF EXPECTED KEYS ARE PRESENT
-        if 'base_asset' not in market or 'quote_asset' not in market:
-            print(f"Market data missing expected keys: {market}")
+        if 'base_asset' not in market_data or 'quote_asset' not in market_data:
+            print(f"Market data missing expected keys: {market_data}")
             continue
 
-        base_asset = market['base_asset']
-        quote_asset = market['quote_asset']
-        market_id = market.get('market_id', 'unknown')
+        base_asset = market_data['base_asset']
+        quote_asset = market_data['quote_asset']
+        market_id = market_data.get('market_id', 'unknown')
 
         mid_price = 0
         if is_spot:
@@ -90,13 +132,13 @@ def process_market_data(markets, is_spot=True):
             else:
                 continue
         else:
-            mid_price = market.get('mark_price', 0)
+            mid_price = market_data.get('mark_price', 0)
 
         base_decimals = ASSET_DECIMALS.get(base_asset, 0)
         quote_decimals = ASSET_DECIMALS.get(quote_asset, 0)
 
-        current_min_price_tick = convert_to_human_readable(int(market.get('min_price_tick_size', 0)), quote_decimals)
-        current_min_qty_tick = convert_to_human_readable(int(market.get('min_qty_tick_size', 0)), base_decimals)
+        current_min_price_tick = convert_to_human_readable(int(market_data.get('min_price_tick_size', 0)), quote_decimals)
+        current_min_qty_tick = convert_to_human_readable(int(market_data.get('min_quantity_tick_size', 0)), base_decimals)
 
         suggested_min_price_tick, suggested_min_qty_tick = get_tick_sizes(mid_price, quote_asset)
 
@@ -113,7 +155,7 @@ def process_market_data(markets, is_spot=True):
             })
     return discrepancies
 def main():
-    # Fetch the market data
+    #Fetches market data
     spot_markets = fetch_json(SPOT_MARKETS_URL)
     perp_markets = fetch_json(PERP_MARKETS_URL)
     
@@ -121,14 +163,14 @@ def main():
         print("Failed to retrieve market data.")
         return
 
-    # Process and check discrepancies in both spot and perp markets
+    #Process and check discrepancies in both spot and perp markets
     spot_discrepancies = process_market_data(spot_markets, is_spot=True)
     perp_discrepancies = process_market_data(perp_markets, is_spot=False)
 
-    # Combine discrepancies
+    #Combines discrepancies
     discrepancies = spot_discrepancies + perp_discrepancies
 
-    # Output any discrepancies
+    #Outputs any discrepancies
     if discrepancies:
         print("Discrepancies found:")
         for discrepancy in discrepancies:
