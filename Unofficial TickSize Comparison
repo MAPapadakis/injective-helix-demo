@@ -76,19 +76,14 @@ expected_keys = {
     'maker_fee_rate', 'taker_fee_rate', 'relayer_fee_share_rate',
     'market_id', 'status', 'min_price_tick_size',
     'min_quantity_tick_size', 'min_notional', 'admin',
-    'admin_permissions'
+    'admin_permissions',
+    #BELOW NOT RECIEVED
+    'hourly_funding_rate_cap', 'hourly_interest_rate',
+        'next_funding_timestamp', 'funding_interval',
+        'cumulative_funding', 'cumulative_price', 'last_timestamp',
+        'mid_price_and_tob'
 }
-#The "Expected" keys
-"""
-    'ticker', 'oracle_base', 'oracle_quote', 'oracle_type',
-    'oracle_scale_factor', 'quote_denom', 'market_id',
-    'initial_margin_ratio', 'maintenance_margin_ratio',
-    'maker_fee_rate', 'taker_fee_rate', 'relayer_fee_share_rate',
-    'isPerpetual', 'status', 'min_price_tick_size',
-    'min_quantity_tick_size', 'min_notional', 'admin',
-    'admin_permissions'
 
-"""
 for market in market_data:
   #Below comment is Logging; to see which markets are being processed and which keys are found.
     #print(f"Market keys found: {market.keys()}")
@@ -128,129 +123,112 @@ def process_spot_market_data(markets):
         'min_quantity_tick_size', 'min_notional', 'admin',
         'admin_permissions'
     }
-    #Create a discrepancy storing list
     discrepancies = []
     
     for market in markets:
-      #Below comment logs market keys which are found in dict_keys. 
-        #print(f"Market keys found: {market.keys()}")
         missing_keys = expected_keys - market.keys()
         if missing_keys:
             print(f"Market data missing expected keys: {missing_keys}")
-            #Another New Bit Here, to fix "TypeError: 'NoneType' object is not iterable" errors.
             discrepancies.append({
               'market': market.get('ticker'),
               'missing_keys': missing_keys
             })
             continue
         
-        # The below comment will Log the spot market data through print.
-        # print(f"Processing spot market: {market['ticker']}")
-        
-    #Should return list of discrpencies
-    return discrepancies
+        market_id = market['market_id']
+        mid_price_data = fetch_json(SPOT_MID_PRICE_URL + market_id)
+        mid_price = mid_price_data.get('mid_price', 0) if mid_price_data else 0
 
-def process_perpetual_market_data(markets):
-    expected_keys = {
-        'ticker', 'oracle_base', 'oracle_quote', 'oracle_type',
-        'oracle_scale_factor', 'quote_denom', 'market_id',
-        'initial_margin_ratio', 'maintenance_margin_ratio',
-        'maker_fee_rate', 'taker_fee_rate', 'relayer_fee_share_rate',
-        'isPerpetual', 'status', 'min_price_tick_size',
-        'min_quantity_tick_size', 'min_notional', 'admin',
-        'admin_permissions'
-    }
-    
-    #Creating yet another hecking discrepancies list
-    discrepancies = []
-    
-    for market in markets:
-        #Should see ifthe "Perpetual_Info" is present or not
-                #The below comment is potentially vestigial code:
-                #perpetual_info = market.get('perpetual_info')
-        market_data = market.get('market', {})
-        #if perpetual_info is None:
-        if not market_data:
-          #Modified to get 'unknown' instead of 'market'
-            print(f"Perpetual info is missing for market: {market.get('unknown')}")
-            continue
-        #Changing out "market.keys()" for "perpetual_info.keys()"  NOT ANYMORE.
-        print(f"Market keys found: {market_data.keys()}")
-        missing_keys = expected_keys - market_data.keys()
-        if missing_keys:
-            print(f"Market data missing expected keys: {missing_keys}")
-            #Another one of the new bits here, to fix the same "TypeError: 'NoneType'" error, which recurred.
-            discrepancies.append({
-              #"market.get('ticker')", becomes "market.get('market')".   NOT ANYMORE.
-              'market': market_data.get('ticker', 'unknown'),
-              'missing_keys': missing_keys
-            })
-            continue
-          
-          
-            
-        
-#NOW processing the PERPETUAL market data ("market" -> "perpetual_info".XXX NOT ANYMORE. NOW, ITS market_data.)
-        print(f"Processing perpetual market: {market_data['ticker']}")
-        
-        
-    return discrepancies
-
-
-#OLD process_market_data
-"""
-def process_market_data(markets, is_spot=True):
-    discrepancies = []
-    
-    # CHECKER IF THE 'markets' KEY IS IN EXISTENCE
-    if 'markets' not in markets:
-        print("No 'markets' key found in the response.")
-        return discrepancies
-
-    for market in markets['markets']:
-        # Accessing the nested 'market' dictionary
-        market_data = market.get('market', {})
-        
-        # THIS BIT WILL CHECK IF EXPECTED KEYS ARE PRESENT
-        if 'base_asset' not in market_data or 'quote_asset' not in market_data:
-            print(f"Market data missing expected keys: {market_data}")
-            continue
-
-        base_asset = market_data['base_asset']
-        quote_asset = market_data['quote_asset']
-        market_id = market_data.get('market_id', 'unknown')
-
-        mid_price = 0
-        if is_spot:
-            mid_price_data = fetch_json(SPOT_MID_PRICE_URL + market_id)
-            if mid_price_data:
-                mid_price = mid_price_data.get('mid_price', 0)
-            else:
-                continue
-        else:
-            mid_price = market_data.get('mark_price', 0)
-
+        base_asset = market['base_denom']
+        quote_asset = market['quote_denom']
         base_decimals = ASSET_DECIMALS.get(base_asset, 0)
         quote_decimals = ASSET_DECIMALS.get(quote_asset, 0)
 
-        current_min_price_tick = convert_to_human_readable(int(market_data.get('min_price_tick_size', 0)), quote_decimals)
-        current_min_qty_tick = convert_to_human_readable(int(market_data.get('min_quantity_tick_size', 0)), base_decimals)
+        # Convert to float first, then to int
+        current_min_price_tick = convert_to_human_readable(float(market.get('min_price_tick_size', 0)), quote_decimals)
+        current_min_qty_tick = convert_to_human_readable(float(market.get('min_quantity_tick_size', 0)), base_decimals)
 
         suggested_min_price_tick, suggested_min_qty_tick = get_tick_sizes(mid_price, quote_asset)
 
         if (current_min_price_tick != suggested_min_price_tick or
                 current_min_qty_tick != suggested_min_qty_tick):
             discrepancies.append({
-                'market': market_id,
-                'base_asset': base_asset,
-                'quote_asset': quote_asset,
+                'market': market['ticker'],
                 'current_min_price_tick': current_min_price_tick,
                 'suggested_min_price_tick': suggested_min_price_tick,
                 'current_min_qty_tick': current_min_qty_tick,
                 'suggested_min_qty_tick': suggested_min_qty_tick
             })
+    
     return discrepancies
-    """
+
+def process_perpetual_market_data(markets):
+  expected_market_keys = {
+        'ticker', 'oracle_base', 'oracle_quote', 'oracle_type',
+        'oracle_scale_factor', 'quote_denom', 'market_id',
+        'initial_margin_ratio', 'maintenance_margin_ratio',
+        'maker_fee_rate', 'taker_fee_rate', 'relayer_fee_share_rate',
+        'isPerpetual', 'status', 'min_price_tick_size',
+        'min_quantity_tick_size', 'min_notional', 'admin',
+        'admin_permissions',
+    }
+
+  expected_perpetual_info_keys = {
+        'market_id', 'hourly_funding_rate_cap', 'hourly_interest_rate',
+        'next_funding_timestamp', 'funding_interval',
+        'cumulative_funding', 'cumulative_price', 'last_timestamp',
+    }
+
+  discrepancies = []
+
+  for market in markets:
+        market_data = market.get('market', {})
+        perpetual_info = market.get('perpetual_info', {})
+
+        # Check for expected keys in market data
+        missing_market_keys = expected_market_keys - market_data.keys()
+        if missing_market_keys:
+            discrepancies.append({
+                'market': market_data.get('ticker', 'Unknown'),
+                'missing_keys': missing_market_keys
+            })
+
+        # Check for expected keys in perpetual_info
+        missing_perpetual_info_keys = expected_perpetual_info_keys - perpetual_info.keys()
+        if missing_perpetual_info_keys:
+            discrepancies.append({
+                'market': market_data.get('ticker', 'Unknown'),
+                'missing_keys': missing_perpetual_info_keys
+            })
+
+        #Checking within nested structures
+        market_info = perpetual_info.get('market_info', {})
+        funding_info = perpetual_info.get('funding_info', {})
+
+        #Checking for keys in market_info
+        missing_market_info_keys = {'market_id'} - market_info.keys()
+        if missing_market_info_keys:
+            discrepancies.append({
+                'market': market_data.get('ticker', 'Unknown'),
+                'missing_keys': missing_market_info_keys
+            })
+
+        # Checks for keys in funding_info
+        missing_funding_info_keys = expected_perpetual_info_keys - funding_info.keys()
+        if missing_funding_info_keys:
+            discrepancies.append({
+                'market': market_data.get('ticker', 'Unknown'),
+                'missing_keys': missing_funding_info_keys
+            })
+
+        # This SHOULD PROCESS THE NEWLY VALID MARKET DATA
+        if not (missing_market_keys or missing_perpetual_info_keys):
+            print(f"Processing perpetual market: {market_data['ticker']}")
+
+  return discrepancies
+
+
+
  #NEW MAIN
     
 def main():
@@ -302,39 +280,4 @@ if __name__ == "__main__":
     
     
     #OLD MAIN
-    """
-def main():
-    #Fetches market data
-    spot_markets = fetch_json(SPOT_MARKETS_URL)
-    perp_markets = fetch_json(PERP_MARKETS_URL)
-    
-    if not spot_markets or not perp_markets:
-        print("Failed to retrieve market data.")
-        return
-
-    #Process and check discrepancies in both spot and perp markets
-    spot_discrepancies = process_market_data(spot_markets, is_spot=True)
-    perp_discrepancies = process_market_data(perp_markets, is_spot=False)
-
-    #Combines discrepancies
-    discrepancies = spot_discrepancies + perp_discrepancies
-
-    #Outputs any discrepancies
-    if discrepancies:
-        print("Discrepancies found:")
-        for discrepancy in discrepancies:
-            print(f"Market: {discrepancy['market']}")
-            print(f"Base Asset: {discrepancy['base_asset']}")
-            print(f"Quote Asset: {discrepancy['quote_asset']}")
-            print(f"Current Min Price Tick: {discrepancy['current_min_price_tick']}")
-            print(f"Suggested Min Price Tick: {discrepancy['suggested_min_price_tick']}")
-            print(f"Current Min Quantity Tick: {discrepancy['current_min_qty_tick']}")
-            print(f"Suggested Min Quantity Tick: {discrepancy['suggested_min_qty_tick']}")
-            print("-" * 40)
-    else:
-        print("No discrepancies detected.")
-
-if __name__ == "__main__":
-    main()
-    """
-    
+ 
