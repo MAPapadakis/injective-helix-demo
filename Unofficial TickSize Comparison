@@ -44,7 +44,7 @@ TICK_SIZE_GUIDELINES = {
  
         
 def fetch_json(url, retries=3, delay=2):
-    """Fetch JSON data from a URL with retries on failure."""
+    """This will fetch JSON data from a URL, with retries on failure."""
     for attempt in range(retries):
         try:
             response = requests.get(url)
@@ -57,16 +57,29 @@ def fetch_json(url, retries=3, delay=2):
     
 def fetch_market_data():
     spot_markets = fetch_json(SPOT_MARKETS_URL)  # Fetch data from the API
+    #SO.  The below commented out line should confirm the structure of the response, or what keys are likely expected.
+    """
+    print("Fetched Spot Markets:", spot_markets)  # Add this line
+    """
     if spot_markets:
         return spot_markets.get('markets', [])  # Return the list of markets
     return []
+
         
     
 
 market_data = fetch_market_data()
 
-# The EXPECTED Keys
+# The TRUE expected Keys
 expected_keys = {
+   'ticker', 'base_denom', 'quote_denom',
+    'maker_fee_rate', 'taker_fee_rate', 'relayer_fee_share_rate',
+    'market_id', 'status', 'min_price_tick_size',
+    'min_quantity_tick_size', 'min_notional', 'admin',
+    'admin_permissions'
+}
+#The "Expected" keys
+"""
     'ticker', 'oracle_base', 'oracle_quote', 'oracle_type',
     'oracle_scale_factor', 'quote_denom', 'market_id',
     'initial_margin_ratio', 'maintenance_margin_ratio',
@@ -74,9 +87,11 @@ expected_keys = {
     'isPerpetual', 'status', 'min_price_tick_size',
     'min_quantity_tick_size', 'min_notional', 'admin',
     'admin_permissions'
-}
 
+"""
 for market in market_data:
+  #Logging; to see which markets are being processed and which keys are found.
+    print(f"Market keys found: {market.keys()}")
     missing_keys = expected_keys - market.keys()
     if missing_keys:
         print(f"Market data missing expected keys: {missing_keys}")
@@ -103,6 +118,76 @@ def convert_to_human_readable(amount, decimals):
     """THIS SHOULD FULFILL THE FOLLOWING: Convert machine-readable amount to human-readable format."""
     return amount / (10 ** decimals)
 
+
+#NEW MARKET DATA PROCESS FUNCTIONS
+def process_spot_market_data(markets):
+    expected_keys = {
+        'ticker', 'base_denom', 'quote_denom',
+        'maker_fee_rate', 'taker_fee_rate', 'relayer_fee_share_rate',
+        'market_id', 'status', 'min_price_tick_size',
+        'min_quantity_tick_size', 'min_notional', 'admin',
+        'admin_permissions'
+    }
+    #Create a discrepancy storing list
+    discrepancies = []
+    
+    for market in markets:
+        print(f"Market keys found: {market.keys()}")
+        missing_keys = expected_keys - market.keys()
+        if missing_keys:
+            print(f"Market data missing expected keys: {missing_keys}")
+            #Another New Bit Here, to fix "TypeError: 'NoneType' object is not iterable" errors.
+            discrepancies.append({
+              'market': market.get('ticker'),
+              'missing_keys': missing_keys
+            })
+            continue
+        
+        # Process the market data here through print
+        print(f"Processing spot market: {market['ticker']}")
+        
+    #Should return list of discrpencies
+    return discrepancies
+
+def process_perpetual_market_data(markets):
+    expected_keys = {
+        'ticker', 'oracle_base', 'oracle_quote', 'oracle_type',
+        'oracle_scale_factor', 'quote_denom', 'market_id',
+        'initial_margin_ratio', 'maintenance_margin_ratio',
+        'maker_fee_rate', 'taker_fee_rate', 'relayer_fee_share_rate',
+        'isPerpetual', 'status', 'min_price_tick_size',
+        'min_quantity_tick_size', 'min_notional', 'admin',
+        'admin_permissions'
+    }
+    
+    #Creating yet another hecking discrepancies list
+    discrepancies = []
+    
+    for market in markets:
+        print(f"Market keys found: {market.keys()}")
+        missing_keys = expected_keys - market.keys()
+        
+        if missing_keys:
+            print(f"Market data missing expected keys: {missing_keys}")
+            #Another one of the new bits here, to fix the same "TypeError: 'NoneType'" error, which recurred.
+            discrepancies.append({
+              'market': market.get('ticker'),
+              'missing_keys': missing_keys
+            })
+            continue
+          
+          
+            
+        
+        # Process the market data also through print
+        print(f"Processing perpetual market: {market['ticker']}")
+        
+        
+    return discrepancies
+
+
+#OLD process_market_data
+"""
 def process_market_data(markets, is_spot=True):
     discrepancies = []
     
@@ -154,6 +239,56 @@ def process_market_data(markets, is_spot=True):
                 'suggested_min_qty_tick': suggested_min_qty_tick
             })
     return discrepancies
+    """
+ #NEW MAIN
+    
+def main():
+    # Fetch the market data with fetch_json
+    spot_markets = fetch_json(SPOT_MARKETS_URL)
+    perp_markets = fetch_json(PERP_MARKETS_URL)
+    
+    
+    discrepancies = []
+    #ENSURE ITS NOT NONE
+    if spot_markets is not None:
+        discrepancies += process_spot_market_data(spot_markets['markets'])
+    #ALSO ENSURE ITS NOT NONE (But also ALSO ensure it has the markets key)
+    if perp_markets is not None and 'markets' in perp_markets:
+        discrepancies += process_perpetual_market_data(perp_markets['markets'])
+
+
+
+
+    if discrepancies:
+        print("Discrepancies found:")
+        for discrepancy in discrepancies:
+          print(f"Market: {discrepancy['market']}, Missing Keys: {discrepancy['missing_keys']}")
+          #Assuming the above works, below is mostly unecessary now(?)
+          """
+            print(f"Market: {discrepancy['market']}")
+            print(f"Base Asset: {discrepancy['base_asset']}")
+            print(f"Quote Asset: {discrepancy['quote_asset']}")
+            print(f"Current Min Price Tick: {discrepancy['current_min_price_tick']}")
+            print(f"Suggested Min Price Tick: {discrepancy['suggested_min_price_tick']}")
+            print(f"Current Min Quantity Tick: {discrepancy['current_min_qty_tick']}")
+            print(f"Suggested Min Quantity Tick: {discrepancy['suggested_min_qty_tick']}")
+            print("-" * 40)
+            """
+          
+    else:
+        print("No discrepancies detected.")
+        
+        
+        
+        
+if __name__ == "__main__":
+    main()
+    
+    
+    
+  
+#OLD MAIN
+    """
 def main():
     #Fetches market data
     spot_markets = fetch_json(SPOT_MARKETS_URL)
@@ -187,3 +322,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    """
