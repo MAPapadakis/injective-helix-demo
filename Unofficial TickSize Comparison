@@ -9,6 +9,7 @@ PERP_MARKETS_URL = "https://sentry.lcd.injective.network/injective/exchange/v1be
 ASSET_DECIMALS = {
     "usdt": 6,
     "inj": 18,
+    # Add other known denominations if needed
 }
 
 # Default decimals for unknown denominations
@@ -81,18 +82,16 @@ def process_spot_market_data(markets):
             continue
         
         # Get current tick sizes
-        quote_denom = market['quote_denom']
-        if quote_denom not in ASSET_DECIMALS:
-            print(f"Warning: Unknown quote_denom '{quote_denom}' for market '{market.get('ticker')}'.")
-            continue
+        quote_denom = market['quote_denom'].lower()  # Ensure lowercase for consistency
+        decimals = ASSET_DECIMALS.get(quote_denom, DEFAULT_DECIMALS)
 
         min_price_tick_size = convert_to_human_readable(
             float(market['min_price_tick_size']),
-            ASSET_DECIMALS[quote_denom]
+            decimals
         )
         min_quantity_tick_size = convert_to_human_readable(
             float(market['min_quantity_tick_size']),
-            ASSET_DECIMALS[quote_denom]
+            decimals
         )
 
         # Get expected tick sizes
