@@ -56,12 +56,12 @@ def fetch_json(url, retries=3, delay=2):
     return None
     
 def fetch_market_data():
-    spot_markets = fetch_json(SPOT_MARKETS_URL)  # Fetch data from the API
-    #SO.  The below commented out line should confirm the structure of the response, or what keys are likely expected.
-    """
-    print("Fetched Spot Markets:", spot_markets)  # Add this line
-    """
-    if spot_markets:
+    spot_markets = fetch_json(SPOT_MARKETS_URL)  #Should Fetch data from the API
+    #The below commented out line SHOULD confirm structure of the response, or what keys are expected(?)
+    #print("Fetched Spot Markets:", spot_markets)  
+    
+    #Below changed from just "if spot_markets:"
+    if spot_markets and isinstance(spot_markets, dict):
         return spot_markets.get('markets', [])  # Return the list of markets
     return []
 
@@ -90,8 +90,8 @@ expected_keys = {
 
 """
 for market in market_data:
-  #Logging; to see which markets are being processed and which keys are found.
-    print(f"Market keys found: {market.keys()}")
+  #Below comment is Logging; to see which markets are being processed and which keys are found.
+    #print(f"Market keys found: {market.keys()}")
     missing_keys = expected_keys - market.keys()
     if missing_keys:
         print(f"Market data missing expected keys: {missing_keys}")
@@ -132,7 +132,8 @@ def process_spot_market_data(markets):
     discrepancies = []
     
     for market in markets:
-        print(f"Market keys found: {market.keys()}")
+      #Below comment logs market keys which are found in dict_keys. 
+        #print(f"Market keys found: {market.keys()}")
         missing_keys = expected_keys - market.keys()
         if missing_keys:
             print(f"Market data missing expected keys: {missing_keys}")
@@ -143,8 +144,8 @@ def process_spot_market_data(markets):
             })
             continue
         
-        # Process the market data here through print
-        print(f"Processing spot market: {market['ticker']}")
+        # The below comment will Log the spot market data through print.
+        # print(f"Processing spot market: {market['ticker']}")
         
     #Should return list of discrpencies
     return discrepancies
@@ -164,14 +165,24 @@ def process_perpetual_market_data(markets):
     discrepancies = []
     
     for market in markets:
-        print(f"Market keys found: {market.keys()}")
-        missing_keys = expected_keys - market.keys()
-        
+        #Should see ifthe "Perpetual_Info" is present or not
+                #The below comment is potentially vestigial code:
+                #perpetual_info = market.get('perpetual_info')
+        market_data = market.get('market', {})
+        #if perpetual_info is None:
+        if not market_data:
+          #Modified to get 'unknown' instead of 'market'
+            print(f"Perpetual info is missing for market: {market.get('unknown')}")
+            continue
+        #Changing out "market.keys()" for "perpetual_info.keys()"  NOT ANYMORE.
+        print(f"Market keys found: {market_data.keys()}")
+        missing_keys = expected_keys - market_data.keys()
         if missing_keys:
             print(f"Market data missing expected keys: {missing_keys}")
             #Another one of the new bits here, to fix the same "TypeError: 'NoneType'" error, which recurred.
             discrepancies.append({
-              'market': market.get('ticker'),
+              #"market.get('ticker')", becomes "market.get('market')".   NOT ANYMORE.
+              'market': market_data.get('ticker', 'unknown'),
               'missing_keys': missing_keys
             })
             continue
@@ -179,8 +190,8 @@ def process_perpetual_market_data(markets):
           
             
         
-        # Process the market data also through print
-        print(f"Processing perpetual market: {market['ticker']}")
+#NOW processing the PERPETUAL market data ("market" -> "perpetual_info".XXX NOT ANYMORE. NOW, ITS market_data.)
+        print(f"Processing perpetual market: {market_data['ticker']}")
         
         
     return discrepancies
@@ -244,16 +255,19 @@ def process_market_data(markets, is_spot=True):
     
 def main():
     # Fetch the market data with fetch_json
-    spot_markets = fetch_json(SPOT_MARKETS_URL)
+    # BUT NOT FOR SPOT MARKETS!  That is a list now.
+    spot_markets = fetch_market_data()
     perp_markets = fetch_json(PERP_MARKETS_URL)
     
     
     discrepancies = []
     #ENSURE ITS NOT NONE
-    if spot_markets is not None:
-        discrepancies += process_spot_market_data(spot_markets['markets'])
-    #ALSO ENSURE ITS NOT NONE (But also ALSO ensure it has the markets key)
-    if perp_markets is not None and 'markets' in perp_markets:
+    #AND NOW, I NEWLY NEED TO ENSURE THAT THE MARKETS KEY IS IN "spot_markets"
+    if spot_markets:
+        discrepancies += process_spot_market_data(spot_markets)
+        
+    #ALSO ENSURE ITS NOT NONE (But also ALSO ensure it has the markets key IN "perp_markets")
+    if perp_markets and 'markets' in perp_markets:
         discrepancies += process_perpetual_market_data(perp_markets['markets'])
 
 
@@ -278,7 +292,7 @@ def main():
     else:
         print("No discrepancies detected.")
         
-        
+    print("Fetched Perpetual Markets:", perp_markets, "And THAT'S THAT.")
         
         
 if __name__ == "__main__":
@@ -286,8 +300,8 @@ if __name__ == "__main__":
     
     
     
-  
-#OLD MAIN
+    
+    #OLD MAIN
     """
 def main():
     #Fetches market data
@@ -323,3 +337,4 @@ def main():
 if __name__ == "__main__":
     main()
     """
+    
