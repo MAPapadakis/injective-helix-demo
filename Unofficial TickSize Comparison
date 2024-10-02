@@ -44,7 +44,7 @@ TICK_SIZE_GUIDELINES = {
 }
 
 def fetch_json(url, retries=3, delay=2):
-    """Fetch JSON data from a URL with retries on failure."""
+    #Fetch JSON data from a URL with retries on failure.
     for attempt in range(retries):
         try:
             response = requests.get(url)
@@ -56,11 +56,9 @@ def fetch_json(url, retries=3, delay=2):
     return None
 
 def fetch_market_data():
-    """Fetch spot market data."""
+    #Fetch spot market data.
     spot_markets = fetch_json(SPOT_MARKETS_URL)
-    if spot_markets and isinstance(spot_markets, dict):
-        return spot_markets.get('markets', [])
-    return []
+    return spot_markets.get('markets', []) if spot_markets and isinstance(spot_markets, dict) else []
 
 def process_spot_market_data(markets):
     expected_keys = {
@@ -71,16 +69,12 @@ def process_spot_market_data(markets):
         'admin_permissions'
     }
     discrepancies = []
-    
+
     for market in markets:
         missing_keys = expected_keys - market.keys()
         if missing_keys:
-            discrepancies.append({
-                'market': market.get('ticker'),
-                'missing_keys': missing_keys
-            })
-            continue
-        
+            continue  # Skip markets with missing keys
+
         # Get current tick sizes
         quote_denom = market['quote_denom'].lower()  # Ensure lowercase for consistency
         decimals = ASSET_DECIMALS.get(quote_denom, DEFAULT_DECIMALS)
@@ -96,47 +90,68 @@ def process_spot_market_data(markets):
 
         # Get expected tick sizes
         expected_tick_sizes = get_tick_sizes(min_price_tick_size, quote_denom)
-        
-        if expected_tick_sizes is None:
-            print(f"No guidelines found for market '{market.get('ticker')}'.")
-            continue
-        
+
+        if expected_tick_sizes == (0, 0) or expected_tick_sizes == (-1, -1):
+          continue  # Skip markets with no valid guidelines
+
         # Compare current tick sizes with expected tick sizes
         if (min_price_tick_size, min_quantity_tick_size) != expected_tick_sizes:
+            expected_sizes_human_readable = (
+                convert_to_human_readable(expected_tick_sizes[0], decimals),
+                convert_to_human_readable(expected_tick_sizes[1], decimals)
+            )
             discrepancies.append({
                 'market': market.get('ticker'),
                 'current_sizes': (min_price_tick_size, min_quantity_tick_size),
-                'expected_sizes': expected_tick_sizes
+                'expected_sizes': expected_sizes_human_readable
             })
 
     return discrepancies
 
 def convert_to_human_readable(amount, decimals):
-    """Convert machine-readable amount to human-readable format."""
+    #Convert machine-readable amount to human-readable format.#
     return amount / (10 ** decimals)
 
+"""
 def get_tick_sizes(price, asset_type):
-    """Calculate the suggested tick sizes based on the current price and asset type."""
+    #Calculate the suggested tick sizes based on the current price and asset type.
     guidelines = TICK_SIZE_GUIDELINES.get(asset_type, [])
     for min_price, min_price_tick, min_qty_tick in guidelines:
         if price >= min_price:
             return min_price_tick, min_qty_tick
-    return None, None
+    
+    # Return a sentinel value indicating no valid sizes found
+    return 0, 0
+"""
 
+def get_tick_sizes(price, asset_type):
+    guidelines = TICK_SIZE_GUIDELINES.get(asset_type, [])
+    for min_price, min_price_tick, min_qty_tick in guidelines:
+        if price >= min_price:
+            # Adjust expected sizes upward if necessary
+            return min_price_tick * (10 ** 18), min_qty_tick * (10 ** 18)
+    return 0, 0
+    
+    
+    
 def main():
     spot_markets = fetch_market_data()
-    discrepancies = []
-
-    if spot_markets:
-        discrepancies += process_spot_market_data(spot_markets)
+    discrepancies = process_spot_market_data(spot_markets)
 
     if discrepancies:
-        print("Discrepancies found:")
+        print("Discrepancies found in tick sizes:")
         for discrepancy in discrepancies:
             market_name = discrepancy.get('market', 'Unknown')
             current_sizes = discrepancy.get('current_sizes', [])
             expected_sizes = discrepancy.get('expected_sizes', [])
-            print(f"Market: {market_name}, Current Tick Sizes: {current_sizes}, Expected Tick Sizes: {expected_sizes}")
+            #Format sizes for better readability without losing precision
+            formatted_current_sizes = [f"{size:.6e}" for size in current_sizes]
+            formatted_expected_sizes = [f"{size:.6e}" for size in expected_sizes]
+            
+            
+            print(f"Market: {market_name}, "
+                  f"Current Tick Sizes: {current_sizes}, "
+                  f"Expected Tick Sizes: {expected_sizes}")
     else:
         print("No discrepancies detected.")
 
