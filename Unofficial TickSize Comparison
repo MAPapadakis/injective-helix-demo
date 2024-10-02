@@ -112,17 +112,7 @@ def convert_to_human_readable(amount, decimals):
     #Convert machine-readable amount to human-readable format.#
     return amount / (10 ** decimals)
 
-"""
-def get_tick_sizes(price, asset_type):
-    #Calculate the suggested tick sizes based on the current price and asset type.
-    guidelines = TICK_SIZE_GUIDELINES.get(asset_type, [])
-    for min_price, min_price_tick, min_qty_tick in guidelines:
-        if price >= min_price:
-            return min_price_tick, min_qty_tick
-    
-    # Return a sentinel value indicating no valid sizes found
-    return 0, 0
-"""
+
 
 def get_tick_sizes(price, asset_type):
     guidelines = TICK_SIZE_GUIDELINES.get(asset_type, [])
@@ -130,6 +120,8 @@ def get_tick_sizes(price, asset_type):
         if price >= min_price:
             # Adjust expected sizes upward if necessary
             return min_price_tick * (10 ** 18), min_qty_tick * (10 ** 18)
+            
+    #Return Sentinel Value
     return 0, 0
     
     
@@ -139,19 +131,21 @@ def main():
     discrepancies = process_spot_market_data(spot_markets)
 
     if discrepancies:
-        print("Discrepancies found in tick sizes:")
+        print("Discrepancies found in tick sizes: \n \n" )
         for discrepancy in discrepancies:
             market_name = discrepancy.get('market', 'Unknown')
             current_sizes = discrepancy.get('current_sizes', [])
             expected_sizes = discrepancy.get('expected_sizes', [])
             #Format sizes for better readability without losing precision
-            formatted_current_sizes = [f"{size:.6e}" for size in current_sizes]
-            formatted_expected_sizes = [f"{size:.6e}" for size in expected_sizes]
+            formatted_current_sizes = [f"{size:.1e}" for size in current_sizes]
+            formatted_expected_sizes = [f"{size:.1e}" for size in expected_sizes]
             
             
-            print(f"Market: {market_name}, "
-                  f"Current Tick Sizes: {current_sizes}, "
-                  f"Expected Tick Sizes: {expected_sizes}")
+            print(f"Market: {market_name}, \n"
+                  #f"Current Tick Sizes: {current_sizes}, "
+                  #f"Expected Tick Sizes: {expected_sizes}")
+                  f"Current Tick Sizes: {formatted_current_sizes}, \n"
+                  f"Expected Tick Sizes: {formatted_expected_sizes} \n ")
     else:
         print("No discrepancies detected.")
 
